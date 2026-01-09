@@ -71,21 +71,24 @@ def CNN():
     base_output = train_generator(inputs)
 
     base_model = VGG16(weights = 'imagenet', include_top = False)
-    base_model.trainable = False
-    base_output = base_model(base_output, training=False)
 
+    base_model.trainable = False
     for layer in base_model.layers[-4:]:
         layer.trainable = True
 
+
+    base_output = base_model(base_output)
+
     base_output = AveragePooling2D(pool_size = (4,4)) (base_output)
     base_output = Flatten(name = "flatten") (base_output)
-    base_output = Dense(64, activation = "relu") (base_output)
-    base_output = Dropout(0.5) (base_output)
+
+    base_output = Dense(128, activation = "relu") (base_output)
+    base_output = Dropout(0.4) (base_output)
 
     outputs = Dense(2, activation="softmax")(base_output)
 
     model = Model(inputs, outputs)
-    model.compile(optimizer = Adam(learning_rate  = 1e-4), metrics = ['accuracy'], loss = 'categorical_crossentropy')
+    model.compile(optimizer = Adam(learning_rate  = 3e-5), metrics = ['accuracy'], loss = 'categorical_crossentropy')
 
     return model
 
@@ -150,7 +153,6 @@ if __name__ == '__main__':
     history = train_model(model, train_ds, test_ds, epochs = 10)
 
     cm = evaluate_model(model, test_X, 32, test_Y, lb)
-
     accuracy(cm)
 
     plot_metrics(epochs = 10, history = history)
