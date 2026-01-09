@@ -18,6 +18,7 @@ from keras.layers import Input, Dense, AveragePooling2D, Dropout, Flatten
 from keras.applications import VGG16
 from keras.models import Model
 from keras.optimizers import Adam
+from keras.applications.vgg16 import preprocess_input
 
 from sklearn.metrics import classification_report, confusion_matrix
 
@@ -49,7 +50,8 @@ def plot_image(img):
 
 # Noramalize images and labels as numpy arrays
 def normalize(images , labels):
-    images = np.array(images) / 255.0
+    images = np.array(images, dtype="float32")
+    images = preprocess_input(images)
     labels = np.array(labels)
 
     lb = LabelBinarizer()
@@ -72,6 +74,9 @@ def CNN():
     base_model.trainable = False
     base_output = base_model(base_output, training=False)
 
+    for layer in base_model.layers[-4:]:
+        layer.trainable = True
+
     base_output = AveragePooling2D(pool_size = (4,4)) (base_output)
     base_output = Flatten(name = "flatten") (base_output)
     base_output = Dense(64, activation = "relu") (base_output)
@@ -80,7 +85,7 @@ def CNN():
     outputs = Dense(2, activation="softmax")(base_output)
 
     model = Model(inputs, outputs)
-    model.compile(optimizer = Adam(learning_rate  = 1e-3), metrics = ['accuracy'], loss = 'binary_crossentropy')
+    model.compile(optimizer = Adam(learning_rate  = 1e-4), metrics = ['accuracy'], loss = 'categorical_crossentropy')
 
     return model
 
@@ -106,8 +111,7 @@ def evaluate_model(model, test_X, batch_size, test_Y, label_binarizer):
 
 
 def accuracy(cm):
-    total = sum(sum(cm))
-    accuracy = (cm[0,0]+cm[1,1]) / total
+    accuracy = (np.trace(cm)) / np.sum(cm)
     print("Accuracy: {:.4f}".format(accuracy))
 
 
@@ -116,10 +120,10 @@ def plot_metrics(epochs,history):
     mpl.style.use("ggplot")
     mpl.figure()
 
-    mpl.plot(np.arrange(0, N), history.history["loss"], label = "train_loss")
-    mpl.plot(np.arrange(0, N), history.history["val_loss"], label = "val_loss")
-    mpl.plot(np.arrange(0, N), history.history["accuracy"], label = "accuracy")
-    mpl.plot(np.arrange(0, N), history.history["val_accuracy"], label = "val_accuracy")
+    mpl.plot(np.arange(0, N), history.history["loss"], label = "train_loss")
+    mpl.plot(np.arange(0, N), history.history["val_loss"], label = "val_loss")
+    mpl.plot(np.arange(0, N), history.history["accuracy"], label = "accuracy")
+    mpl.plot(np.arange(0, N), history.history["val_accuracy"], label = "val_accuracy")
 
     mpl.title("Training loss and accuracy on brain tumor dataset")
     mpl.xlabel("Epoch")
@@ -132,8 +136,9 @@ def plot_metrics(epochs,history):
 if __name__ == '__main__':
     images, labels = eda(path)
     images, labels, lb = normalize(images, labels)
+    stratify = np.argmax(labels, axis = 1)
 
-    (train_X, test_X, train_Y, test_Y) = train_test_split(images, labels, test_size = 0.1, random_state = 42, stratify = labels)
+    (train_X, test_X, train_Y, test_Y) = train_test_split(images, labels, test_size = 0.1, random_state = 42, stratify = stratify)
 
     train_ds = tf.data.Dataset.from_tensor_slices((train_X,train_Y)).shuffle(500).batch(32).prefetch(tf.data.AUTOTUNE)
     test_ds = tf.data.Dataset.from_tensor_slices((test_X,test_Y)).batch(32).prefetch(tf.data.AUTOTUNE)
