@@ -1,3 +1,6 @@
+### IMPORTS
+## Using primarily; numpy, pandas, tensorflow, keras, openCV, imutils, matplotlib, and kagglehub
+
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -23,16 +26,23 @@ from keras.applications.vgg16 import preprocess_input
 from sklearn.metrics import classification_report, confusion_matrix
 
 
-# Download latest version
+# Download latest version of kaggle (getting dataset's path)
 path = kagglehub.dataset_download("navoneel/brain-mri-images-for-brain-tumor-detection")
+
+
+####  ------- MAIN PROGRAM -------  ####
+
 
 # Initial data parse
 def eda(path):
+    # Getting image and its label
     images = []
     labels = []
 
     image_path = list(paths.list_images(path))
 
+    # For each image, read, resize, and colour to prepare for parsing
+    # And gets label (y or n)
     for ip in image_path:
         lbl = ip.split(os.path.sep)[-2]
         img = cv.imread(ip)
@@ -51,9 +61,12 @@ def plot_image(img):
 # Noramalize images and labels as numpy arrays
 def normalize(images , labels):
     images = np.array(images, dtype="float32")
+    # Preprocesses the images
     images = preprocess_input(images)
+
     labels = np.array(labels)
 
+    # Changes y or n labels to 0 and 1
     lb = LabelBinarizer()
     labels = lb.fit_transform(labels)
     labels = to_categorical(labels)
@@ -65,35 +78,41 @@ def normalize(images , labels):
 #### Building the CNN (VGG16) ####
 
 def CNN():
+    # Data augmentation - for training, creates new training images
     train_generator = keras.Sequential([layers.RandomFlip("horizontal"), layers.RandomRotation(0.1), layers.RandomZoom(0.1),layers.RandomTranslation(0.1,0.1)])
 
+    # Get model imput
     inputs = Input(shape=(224,224,3))
     base_output = train_generator(inputs)
 
+    # Loads CNN
     base_model = VGG16(weights = 'imagenet', include_top = False)
 
+    # Freeze most layers, (transfer learning)
     base_model.trainable = False
     for layer in base_model.layers[-4:]:
         layer.trainable = True
 
-
+    # Feature extraction
     base_output = base_model(base_output)
-
     base_output = AveragePooling2D(pool_size = (4,4)) (base_output)
     base_output = Flatten(name = "flatten") (base_output)
 
+    # Classifier Head
     base_output = Dense(128, activation = "relu") (base_output)
     base_output = Dropout(0.4) (base_output)
-
     outputs = Dense(2, activation="softmax")(base_output)
 
     model = Model(inputs, outputs)
+    # Low learning rate
     model.compile(optimizer = Adam(learning_rate  = 3e-5), metrics = ['accuracy'], loss = 'categorical_crossentropy')
 
     return model
 
 
+# Training the model
 def train_model(model, train_ds, test_ds, epochs = 10):
+    # For each epoch; forward pass, find loss, backprop., update, validate
     history = model.fit(
         train_ds,
         validation_data = test_ds,
@@ -101,7 +120,10 @@ def train_model(model, train_ds, test_ds, epochs = 10):
     )
     return history
 
+
+# Evaluating the model
 def evaluate_model(model, test_X, batch_size, test_Y, label_binarizer):
+    # From softmax output to class index
     predictions = model.predict(test_X, batch_size = batch_size)
     predictions = np.argmax(predictions, axis = 1)
 
@@ -113,11 +135,13 @@ def evaluate_model(model, test_X, batch_size, test_Y, label_binarizer):
     return cm
 
 
+# Finding the accuracy
 def accuracy(cm):
     accuracy = (np.trace(cm)) / np.sum(cm)
     print("Accuracy: {:.4f}".format(accuracy))
 
 
+# Plotting the results
 def plot_metrics(epochs,history):
     N = epochs
     mpl.style.use("ggplot")
@@ -135,24 +159,33 @@ def plot_metrics(epochs,history):
     mpl.savefig("brainTumorPlot.jpg")
 
 
+
+
 # Main function
 if __name__ == '__main__':
+    # Load images and labels
     images, labels = eda(path)
+    # Normalize
     images, labels, lb = normalize(images, labels)
     stratify = np.argmax(labels, axis = 1)
 
+    # Train/test split
     (train_X, test_X, train_Y, test_Y) = train_test_split(images, labels, test_size = 0.1, random_state = 42, stratify = stratify)
 
+    # Build tensorflow datasets
     train_ds = tf.data.Dataset.from_tensor_slices((train_X,train_Y)).shuffle(500).batch(32).prefetch(tf.data.AUTOTUNE)
     test_ds = tf.data.Dataset.from_tensor_slices((test_X,test_Y)).batch(32).prefetch(tf.data.AUTOTUNE)
 
-
+    # Build CNN
     model = CNN()
     model.summary()
 
+    # Train CNN
     history = train_model(model, train_ds, test_ds, epochs = 10)
 
+    # Evaluate CNN
     cm = evaluate_model(model, test_X, 32, test_Y, lb)
     accuracy(cm)
 
+    # Plot results
     plot_metrics(epochs = 10, history = history)
